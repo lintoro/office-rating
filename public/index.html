@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小辦公室員工績效與評分管理系統</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- SweetAlert2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- 1. 登入視圖 (Login View) -->
+  <div id="login-view" class="container d-none min-vh-100 d-flex align-items-center justify-content-center">
+    <div class="card p-4 shadow-sm style-login-card" style="max-width: 420px; width: 100%;">
+      <div class="text-center mb-4">
+        <div class="bg-primary text-white d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 60px; height: 60px;">
+          <i class="bi bi-person-badge fs-2"></i>
+        </div>
+        <h4 class="fw-bold">管理幹部登入</h4>
+        <p class="text-muted small">請輸入幹部帳密或選擇快速測試帳號</p>
+      </div>
+
+      <!-- 快速切換試用帳號按鈕區 -->
+      <div class="alert alert-light border mb-3">
+        <div class="small fw-bold text-secondary mb-2"><i class="bi bi-lightning-charge me-1"></i>快捷登入小辦公室幹部：</div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-primary btn-sm flex-fill" onclick="quickLogin('manager1', '123')">
+            <i class="bi bi-person-circle"></i> 張經理 (A)
+          </button>
+          <button type="button" class="btn btn-outline-info btn-sm flex-fill" onclick="quickLogin('manager2', '123')">
+            <i class="bi bi-person-circle"></i> 李課長 (B)
+          </button>
+        </div>
+      </div>
+
+      <form id="login-form">
+        <div class="mb-3">
+          <label class="form-label small fw-bold">幹部帳號</label>
+          <input type="text" id="login-username" class="form-control" placeholder="請輸入帳號" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">密碼</label>
+          <input type="password" id="login-password" class="form-control" placeholder="預設密碼 123" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+          <i class="bi bi-box-arrow-in-right me-1"></i> 安全登入
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. 主面板視圖 (Dashboard View) -->
+  <div id="dashboard-view" class="d-none">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
+      <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="#">
+          <i class="bi bi-award-fill text-warning fs-4"></i>
+          <span>辦公室員工評分系統</span>
+          <span class="badge bg-secondary fs-6 ms-1">v1.0 基礎版</span>
+        </a>
+        <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-2 text-light">
+            <div class="manager-avatar" id="nav-manager-avatar">M</div>
+            <div>
+              <div class="fw-bold small" id="nav-manager-name">加載中...</div>
+              <div class="text-muted small" style="font-size: 0.75rem;">管理權限已驗證</div>
+            </div>
+          </div>
+          <button class="btn btn-outline-light btn-sm ms-2" onclick="handleLogout()">
+            <i class="bi bi-box-arrow-right me-1"></i> 登出
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid px-4 py-4">
+      
+      <!-- 統計資訊 Summary Cards -->
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+          <div class="card p-3 d-flex flex-row align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small fw-bold">團隊總人數</div>
+              <div class="fs-3 fw-bold mt-1" id="stat-total-emp">0</div>
+            </div>
+            <div class="bg-primary-subtle text-primary p-3 rounded-circle">
+              <i class="bi bi-people-fill fs-3"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <div class="card p-3 d-flex flex-row align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small fw-bold">團隊平均點數</div>
+              <div class="fs-3 fw-bold mt-1" id="stat-avg-score">0</div>
+            </div>
+            <div class="bg-success-subtle text-success p-3 rounded-circle">
+              <i class="bi bi-speedometer fs-3"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <div class="card p-3 d-flex flex-row align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small fw-bold">卓越/優秀 (S/A級)</div>
+              <div class="fs-3 fw-bold mt-1 text-success" id="stat-high-performers">0</div>
+            </div>
+            <div class="bg-warning-subtle text-warning p-3 rounded-circle">
+              <i class="bi bi-star-fill fs-3"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+          <div class="card p-3 d-flex flex-row align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small fw-bold">需關懷同仁 (<80分)</div>
+              <div class="fs-3 fw-bold mt-1 text-danger" id="stat-need-attention">0</div>
+            </div>
+            <div class="bg-danger-subtle text-danger p-3 rounded-circle">
+              <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作按鈕與搜尋過濾列 -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h5 class="fw-bold m-0"><i class="bi bi-grid-3x3-gap-fill text-primary me-2"></i>員工評分與績效清單</h5>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+            <i class="bi bi-person-plus-fill me-1"></i> 新增員工
+          </button>
+        </div>
+      </div>
+
+      <!-- 主要分區：員工卡片區 + 實體日誌區域 -->
+      <div class="row g-4">
+        <!-- 員工清單區 -->
+        <div class="col-12 col-lg-8">
+          <div class="row g-3" id="employee-list-container">
+            <!-- 動態渲染員工卡片 -->
+          </div>
+        </div>
+
+        <!-- 最新評分動態邊欄 -->
+        <div class="col-12 col-lg-4">
+          <div class="card p-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h6 class="fw-bold m-0"><i class="bi bi-clock-history me-2 text-primary"></i>最新評分動態</h6>
+              <span class="badge bg-light text-dark border">實時紀錄</span>
+            </div>
+            <hr class="mt-1 mb-3">
+            <div id="recent-logs-container">
+              <!-- 動態渲染日誌 -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 3. Modal: 新增員工 -->
+  <div class="modal fade" id="addEmployeeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold"><i class="bi bi-person-plus me-2 text-primary"></i>新增員工資料</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="add-employee-form">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label small fw-bold">員工姓名 <span class="text-danger">*</span></label>
+              <input type="text" id="new-emp-name" class="form-control" placeholder="例：張志明" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">所屬部門</label>
+              <input type="text" id="new-emp-dept" class="form-control" placeholder="例：專案開發部" value="專案開發部">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">職稱</label>
+              <input type="text" id="new-emp-title" class="form-control" placeholder="例：前端工程師" value="專員">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">起始點數 (預設 100 分)</label>
+              <input type="number" id="new-emp-points" class="form-control" value="100" min="0" max="300">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+            <button type="submit" class="btn btn-primary fw-bold">建立員工</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Modal: 自訂加減點數與事由 -->
+  <div class="modal fade" id="customPointModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold"><i class="bi bi-sliders me-2 text-primary"></i>自訂評分與評語</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="custom-point-form">
+          <input type="hidden" id="modal-emp-id">
+          <div class="modal-body">
+            <div class="alert alert-light border mb-3">
+              <div class="fw-bold" id="modal-emp-name">員工名稱</div>
+              <div class="small text-muted" id="modal-emp-info">部門 / 職稱</div>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label small fw-bold">調整點數 (正數加分，負數扣分)</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-plus-slash-minus"></i></span>
+                <input type="number" id="modal-point-delta" class="form-control" placeholder="例如：+10 或 -5" required>
+              </div>
+              <div class="form-text">例：輸入 10 代表增加 10 點；輸入 -5 代表扣除 5 點。</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold">評分原因 / 具體表現說明 <span class="text-danger">*</span></label>
+              <div class="mb-2">
+                <span class="small text-muted me-1">快捷事由 (點擊帶入)：</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="document.getElementById('modal-point-reason').value='完成階段專案任務'">完成專案</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="document.getElementById('modal-point-reason').value='主動協助團隊同仁解題'">團隊協助</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="document.getElementById('modal-point-reason').value='未於期限內交付作業'">進度延誤</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm me-1 mb-1" onclick="document.getElementById('modal-point-reason').value='會議無故遲到/缺席'">開會遲到</button>
+              </div>
+              <textarea id="modal-point-reason" class="form-control" rows="3" placeholder="請填寫具體增加或減少的理由（例如：協助其他團隊解出緊急 Bug、優化資產採購流程...）" required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+            <button type="submit" class="btn btn-primary fw-bold">送出評分</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Modal: 員工異動歷史紀錄 -->
+  <div class="modal fade" id="empLogsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>評分異動歷程明細</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex align-items-center justify-content-between bg-light p-3 rounded mb-3">
+            <div>
+              <h5 class="fw-bold mb-1" id="history-emp-name">--</h5>
+              <div class="small text-muted" id="history-emp-dept">--</div>
+            </div>
+            <div class="text-end">
+              <span class="badge" id="history-emp-badge">--</span>
+              <div class="fs-4 fw-bold mt-1" id="history-emp-score">0 點</div>
+            </div>
+          </div>
+
+          <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1"></i>歷史評分紀錄 (含幹部簽核)</h6>
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 170px;">時間</th>
+                  <th style="width: 140px;">評分幹部</th>
+                  <th style="width: 100px;">點數變更</th>
+                  <th>表現原因說明</th>
+                </tr>
+              </thead>
+              <tbody id="history-logs-tbody">
+                <!-- 動態載入歷史 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5 JS & Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- SweetAlert2 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Custom JS -->
+  <script src="js/app.js"></script>
+</body>
+</html>

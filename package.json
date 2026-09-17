@@ -1,0 +1,22 @@
+{
+  "name": "google-sheet-image-generator",
+  "version": "1.0.0",
+  "description": "Google Sheet 提示詞自動產圖系統",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "once": "node index.js --once",
+    "watch": "node index.js --watch",
+    "card": "node card/card-server.js",
+    "card-auth": "node card/oauth2-init.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "googleapis": "^144.0.0"
+  }
+}
