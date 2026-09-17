@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const sheetsSync = require('./sheets_sync');
 
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// 初始化預設資料
+// 預設關聯記憶體備份
 const defaultData = {
   managers: [
     { id: 1, username: 'manager1', password: '123', name: '張經理 (主管 A)' },
@@ -57,7 +58,6 @@ function loadDb() {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       dbData = JSON.parse(raw);
     } catch (e) {
-      console.error('讀取 data.json 失敗，重新初始化預設值', e);
       fs.writeFileSync(DB_FILE, JSON.stringify(defaultData, null, 2), 'utf-8');
       dbData = defaultData;
     }
@@ -65,35 +65,40 @@ function loadDb() {
 }
 
 function saveDb() {
-  fs.writeFileSync(DB_FILE, JSON.stringify(dbData, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(dbData, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('寫入 data.json 失敗:', e.message);
+  }
 }
 
 loadDb();
 
-// 評價計算邏輯
-function calculateRating(points) {
-  if (points >= 120) return { grade: 'S', label: '卓越 (S)', badgeClass: 'bg-danger' };
-  if (points >= 100) return { grade: 'A', label: '優秀 (A)', badgeClass: 'bg-success' };
-  if (points >= 80) return { grade: 'B', label: '良好 (B)', badgeClass: 'bg-primary' };
-  if (points >= 60) return { grade: 'C', label: '尚可 (C)', badgeClass: 'bg-warning text-dark' };
-  return { grade: 'D', label: '需加強 (D)', badgeClass: 'bg-secondary' };
-}
+// 初始化 Google Sheets 結構
+(async () => {
+  try {
+    const sheets = sheetsSync.getSheetsClient();
+    if (sheets) {
+      await sheetsSync.ensureSheetsExist(sheets);
+      console.log('✅ 已與 Google 試算表完成初始化同步 (Spreadsheet ID:', sheetsSync.SPREADSHEET_ID, ')');
+    }
+  } catch (e) {
+    console.error('Google Sheets 初始化失敗 (回退至本地機制):', e.message);
+  }
+})();
 
 module.exports = {
-  // 管理員登入比對
   findManager(username, password) {
     return dbData.managers.find(m => m.username === username && m.password === password);
   },
 
-  // 取得管理者列表
   getManagers() {
     return dbData.managers.map(m => ({ username: m.username, name: m.name }));
   },
 
-  // 取得所有員工與評價
   getEmployees() {
     return dbData.employees.map(emp => {
-      const rating = calculateRating(emp.points);
+      const rating = sheetsSync.calculateRating(emp.points);
       return {
         ...emp,
         rating
@@ -101,11 +106,10 @@ module.exports = {
     });
   },
 
-  // 取得特定員工詳細資料與歷史紀錄
   getEmployeeById(id) {
     const emp = dbData.employees.find(e => e.id === Number(id));
     if (!emp) return null;
-    const rating = calculateRating(emp.points);
+    const rating = sheetsSync.calculateRating(emp.points);
     const logs = dbData.point_logs
       .filter(l => l.employee_id === Number(id))
       .sort((a, b) => b.id - a.id);
@@ -116,22 +120,44 @@ module.exports = {
     };
   },
 
-  // 新增員工
   addEmployee(name, department, title, initialPoints = 100) {
     const newId = dbData.employees.length > 0 ? Math.max(...dbData.employees.map(e => e.id)) + 1 : 1;
+    const pointsNum = Number(initialPoints) || 100;
+    const ratingObj = sheetsSync.calculateRating(pointsNum);
+
     const newEmp = {
       id: newId,
       name,
       department: department || '通用部門',
       title: title || '一般同仁',
-      points: Number(initialPoints) || 100
+      points: pointsNum
     };
     dbData.employees.push(newEmp);
     saveDb();
-    return newEmp;
+
+    // 異步寫入 Google Sheets
+    (async () => {
+      try {
+        const sheets = sheetsSync.getSheetsClient();
+        if (sheets) {
+          const nowStr = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: sheetsSync.SPREADSHEET_ID,
+            range: `'${sheetsSync.SHEET_EMPLOYEES}'!A:G`,
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+              values: [[newId, name, newEmp.department, newEmp.title, pointsNum, ratingObj.label, nowStr]]
+            }
+          });
+        }
+      } catch (e) {
+        console.error('寫入 Google Sheets 失敗:', e.message);
+      }
+    })();
+
+    return { ...newEmp, rating: ratingObj };
   },
 
-  // 點數異動 (+ / -)
   adjustPoints(employeeId, delta, reason, manager) {
     const emp = dbData.employees.find(e => e.id === Number(employeeId));
     if (!emp) throw new Error('找不到該員工');
@@ -140,8 +166,12 @@ module.exports = {
     if (isNaN(numDelta) || numDelta === 0) throw new Error('無效的點數異動數值');
 
     emp.points += numDelta;
+    const ratingObj = sheetsSync.calculateRating(emp.points);
 
     const logId = dbData.point_logs.length > 0 ? Math.max(...dbData.point_logs.map(l => l.id)) + 1 : 1;
+    const nowStr = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+    const deltaStr = numDelta > 0 ? `+${numDelta}` : `${numDelta}`;
+
     const newLog = {
       id: logId,
       employee_id: Number(employeeId),
@@ -149,22 +179,66 @@ module.exports = {
       manager_name: manager.name,
       delta: numDelta,
       reason: reason || (numDelta > 0 ? '表現優良獎勵' : '規章違規扣分'),
-      created_at: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
+      created_at: nowStr
     };
 
     dbData.point_logs.push(newLog);
     saveDb();
 
+    // 同步更新 Google Sheets (1. 異動紀錄 Append  2. 員工清單總分覆蓋)
+    (async () => {
+      try {
+        const sheets = sheetsSync.getSheetsClient();
+        if (sheets) {
+          // 1. 新增異動紀錄
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: sheetsSync.SPREADSHEET_ID,
+            range: `'${sheetsSync.SHEET_LOGS}'!A:G`,
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+              values: [[logId, emp.id, emp.name, manager.name, deltaStr, newLog.reason, nowStr]]
+            }
+          });
+
+          // 2. 更新或追加員工清單列
+          const empRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: sheetsSync.SPREADSHEET_ID,
+            range: `'${sheetsSync.SHEET_EMPLOYEES}'!A1:A500`
+          });
+          const rows = empRes.data.values || [];
+          let targetRowIndex = -1;
+          for (let i = 1; i < rows.length; i++) {
+            if (rows[i] && Number(rows[i][0]) === emp.id) {
+              targetRowIndex = i + 1; // 1-based index
+              break;
+            }
+          }
+
+          if (targetRowIndex > 0) {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: sheetsSync.SPREADSHEET_ID,
+              range: `'${sheetsSync.SHEET_EMPLOYEES}'!A${targetRowIndex}:G${targetRowIndex}`,
+              valueInputOption: 'USER_ENTERED',
+              resource: {
+                values: [[emp.id, emp.name, emp.department, emp.title, emp.points, ratingObj.label, nowStr]]
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('同步 Google Sheets 異動失敗:', e.message);
+      }
+    })();
+
     return {
       updatedEmployee: {
         ...emp,
-        rating: calculateRating(emp.points)
+        rating: ratingObj
       },
       log: newLog
     };
   },
 
-  // 取得最新幾條全公司異動日誌
   getRecentLogs(limit = 10) {
     return dbData.point_logs
       .slice()
