@@ -2,7 +2,7 @@
   "name": "google-sheet-image-generator",
   "version": "1.0.0",
   "description": "Google Sheet 提示詞自動產圖系統",
-  "main": "index.js",
+  "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
