@@ -1,6 +1,16 @@
 require('dotenv').config();
 const { fetchSheetData, updateRowData, ensureHeader } = require('./sheets');
-const { generateImage } = require('./kie');
+const { generateImage: generateKieImage } = require('./kie');
+const { generateImageWithGoogle } = require('./google-image');
+
+async function generateImage(prompt, config) {
+  const provider = (config.IMAGE_PROVIDER || 'google').toLowerCase();
+  if (provider === 'google' || provider === 'gemini') {
+    return await generateImageWithGoogle(prompt, config);
+  } else {
+    return await generateKieImage(prompt, config);
+  }
+}
 
 async function processBatch() {
   const config = process.env;
@@ -16,8 +26,10 @@ async function processBatch() {
 
     const batchLimit = parseInt(config.BATCH_LIMIT || '5', 10);
     const rowsToProcess = pendingRows.slice(0, batchLimit);
+    const provider = (config.IMAGE_PROVIDER || 'google').toLowerCase();
+    const activeModel = provider === 'google' ? (config.GOOGLE_IMAGE_MODEL || 'gemini-3.1-flash-lite-image') : (config.KIE_MODEL || 'nano-banana-2-lite');
 
-    console.log(`\n🚀 發現 ${pendingRows.length} 筆待處理項目，本次處理前 ${rowsToProcess.length} 筆...`);
+    console.log(`\n🚀 發現 ${pendingRows.length} 筆待處理項目，本次處理前 ${rowsToProcess.length} 筆 (供應商: ${provider}, 模型: ${activeModel})...`);
 
     for (const item of rowsToProcess) {
       console.log(`\n[第 ${item.rowIndex} 列] 開始處理提示詞: "${item.prompt}"`);
@@ -29,7 +41,7 @@ async function processBatch() {
       });
 
       try {
-        // Generate image via Kie
+        // Generate image
         const { imageUrl, localPath } = await generateImage(item.prompt, config);
 
         // Update sheet on success
@@ -37,7 +49,7 @@ async function processBatch() {
           status: 'DONE',
           image_url: imageUrl,
           image_path: localPath,
-          model: config.KIE_MODEL || 'nano-banana-2-lite',
+          model: activeModel,
           generated_at: new Date().toISOString(),
           error: ''
         });
@@ -61,9 +73,10 @@ async function processBatch() {
 async function main() {
   const isWatch = process.argv.includes('--watch');
   const pollInterval = parseInt(process.env.POLL_INTERVAL_SECONDS || '60', 10) * 1000;
+  const provider = (process.env.IMAGE_PROVIDER || 'google').toUpperCase();
 
   console.log('========================================');
-  console.log(' Google Sheet 提示詞自動產圖系統 (Kie AI)');
+  console.log(` Google Sheet 提示詞自動產圖系統 (${provider})`);
   console.log('========================================');
 
   if (isWatch) {
