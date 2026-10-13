@@ -1,10 +1,15 @@
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Session 密鑰：優先讀取環境變數，若未設定則自動產生安全隨機字串
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
 // Middleware
 app.use(express.json());
@@ -13,10 +18,13 @@ app.use(express.urlencoded({ extended: true }));
 // Session 配置
 app.use(
   session({
-    secret: 'dev-session-key-auto-gen',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 } // 1 day
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      secure: process.env.NODE_ENV === 'production'
+    }
   })
 );
 
